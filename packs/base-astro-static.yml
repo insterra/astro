@@ -1,0 +1,78 @@
+name: base-astro-static
+type: template
+description: Astro static build support
+frameworks: [astro]
+visibility: public
+dependencies: [
+  { type: build, main: true, package_name: nodejs-current },
+  { type: build, package_name: npm },
+  { type: runtime, package_name: caddy },
+  { type: runtime, package_name: bash },
+  { type: runtime, package_name: curl },
+  { type: runtime, package_name: s6 },
+  { type: runtime, package_name: jq },
+  { type: runtime, package_name: ca-certificates }
+]
+sections:
+- name: build
+  description: |
+    We set the build destinations, this tells the system what to copy to the package.
+
+    The build command tells the build system how to build your application. We're simply running the npm run build that came with the astro project generator.
+
+    We will use caddy to serve our static site. Please ensure you have the Caddyfile in your root directory you can create the Caddyfile with the following configuration:
+
+    ```
+    {
+      auto_https off
+      admin off
+    }
+
+    :3000 {
+      root * /var/lib/{{name}}/dist
+      file_server
+    }
+    ```
+  attributes:
+    destinations: [
+      dist,
+      Caddyfile
+    ]
+    command: |
+      npm install
+      npm run build
+- name: run
+  description: |
+    This section tells the build configuration how your application is run.
+
+    We describe the commands and services available in the package.
+
+    We'll be running caddy server to serve our static file.
+  attributes:
+    name: "{{name}}"
+    services: [
+      { name: web, binary: caddy, path: /usr/sbin, start: { call: "run --config /var/lib/{{name}}/Caddyfile" }}
+    ]
+- name: hook
+  description: |
+    Hooks are commands that run at different stage of the package lifecycle.
+  attributes:
+    post-install: |
+      rc-update add {{name}}
+    pre-upgrade: |
+      rc-service {{name}} stop
+    post-upgrade: |
+      rc-service {{name}} start
+    post-deinstall: |
+      rc-service {{name}} stop
+      rc-update del {{name}}
+- name: kit
+  description: |
+    This kit will run the caddy static site server on port 3000 and provision the database automatically for your site.
+  attributes:
+    name: "web"
+    description: "static site server"
+    main: true
+    ports: [
+      { name: "web", target: 3000, main: true}
+    ]
